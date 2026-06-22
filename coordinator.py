@@ -49,6 +49,7 @@ COMMAND RULES:
 - One command per response.
 
 PROHIBITED (require HUMAN_INPUT_REQUIRED):
+- Delete branches
 - Force push
 - History rewrite (rebase -i, reset --hard, etc.)
 - Modifying an existing branch without explicit user approval
@@ -73,7 +74,6 @@ HUMAN_INPUT_REQUIRED:
 """
     )
 
-
 def extract_next_command(text: str) -> str | None:
     match = re.search(r"NEXT_COMMAND:\s*(.+)", text, re.DOTALL | re.IGNORECASE)
     if not match:
@@ -91,8 +91,6 @@ def _approved_delete_command(todo: str) -> str | None:
 
     branch = match.group(1).strip()
     return f"git branch -D {branch}"
-
-
 def coordinator_node(state: GitState):
     human_response = state.get("human_response", "")
     if human_response:
@@ -142,6 +140,12 @@ def coordinator_node(state: GitState):
             "todo_complete": False,
             "next_command": approved_delete_command,
         }
+
+    history_text = (
+        "\n\n---\n\n".join(history)
+        if history
+        else "(no commands executed yet)"
+    )
 
     todo_context = SystemMessage(
         content=f"""

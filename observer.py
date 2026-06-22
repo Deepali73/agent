@@ -37,7 +37,6 @@ ANALYSIS:
 """
 )
 
-
 def _current_branch() -> str:
     result = subprocess.run(
         ["git", "branch", "--show-current"],
@@ -203,7 +202,7 @@ LAST RETURN CODE: {state.get("last_return_code", "unknown")}
     todo_complete = "TODO_COMPLETE: YES" in review.upper()
 
     return {
-        "review": review,
-        "todo_complete": todo_complete,
-        "done": False,
+            "review": review,
+            "todo_complete": todo_complete,
+            "done": False,
     }

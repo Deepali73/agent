@@ -99,6 +99,25 @@ def extract_answer(text: str) -> str | None:
     return None
 
 
+def looks_like_direct_answer(text: str) -> bool:
+    if not text.strip():
+        return False
+
+    if re.search(r"^\s*TODOS:\b|^\s*ANSWER:\b", text, re.IGNORECASE | re.MULTILINE):
+        return False
+    if re.search(r"\bgit\s+(checkout|branch|cherry-pick|merge|rebase|reset|push|pull|fetch)\b", text, re.IGNORECASE):
+        return False
+
+    numbered_items = re.findall(r"^\s*\d+\.\s*(.+)$", text, re.MULTILINE)
+    if numbered_items:
+        short_items = [item.strip() for item in numbered_items if item.strip()]
+        if short_items and all(len(item.split()) <= 5 for item in short_items):
+            if not any(re.search(r"\b(create|cherry-pick|branch|commit|merge|delete|checkout)\b", item, re.IGNORECASE) for item in short_items):
+                return True
+
+    return True
+
+
 def _is_delete_approval(response: str) -> bool:
     normalized = response.strip().lower()
     if normalized in {"y", "yes", "delete", "approve", "approved", "proceed", "ok", "okay"}:
@@ -231,6 +250,18 @@ USER REQUEST:
     print(todos)
 
     if not todos:
+        if looks_like_direct_answer(content):
+            return {
+                "messages": [response],
+                "todos": [],
+                "current_todo": 0,
+                "done": True,
+                "final_answer": content,
+                "repo_context": context["summary"],
+                "default_branch": context["default_branch"],
+                "replan": False,
+                "human_response": "",
+            }
         raise ValueError(f"Planner produced invalid output:\n{content}")
 
     return {
