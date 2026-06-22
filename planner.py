@@ -99,6 +99,71 @@ def extract_answer(text: str) -> str | None:
     return None
 
 
+def looks_like_direct_answer(text: str) -> bool:
+    if not text.strip():
+        return False
+
+    if re.search(r"^\s*TODOS:\b|^\s*ANSWER:\b", text, re.IGNORECASE | re.MULTILINE):
+        return False
+    if re.search(r"\bgit\s+(checkout|branch|cherry-pick|merge|rebase|reset|push|pull|fetch)\b", text, re.IGNORECASE):
+        return False
+
+    numbered_items = re.findall(r"^\s*\d+\.\s*(.+)$", text, re.MULTILINE)
+    if numbered_items:
+        short_items = [item.strip() for item in numbered_items if item.strip()]
+        if short_items and all(len(item.split()) <= 5 for item in short_items):
+            if not any(re.search(r"\b(create|cherry-pick|branch|commit|merge|delete|checkout)\b", item, re.IGNORECASE) for item in short_items):
+                return True
+
+    return True
+
+
+def _is_delete_approval(response: str) -> bool:
+    normalized = response.strip().lower()
+    if normalized in {"y", "yes", "delete", "approve", "approved", "proceed", "ok", "okay"}:
+        return True
+    return any(
+        phrase in normalized
+        for phrase in (
+            "delete it",
+            "delete the branch",
+            "yes delete",
+            "go ahead",
+            "proceed with delete",
+        )
+    )
+
+
+def _extract_branch_name(text: str) -> str | None:
+    patterns = (
+        r"branch\s+['\"]([^'\"]+)['\"]",
+        r"delete\s+(?:the\s+)?branch\s+([^\s.,;:!?]+)",
+        r"branch\s+([^\s.,;:!?]+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _approved_delete_todo(state: GitState) -> str | None:
+    if not state.get("replan") or not _is_delete_approval(state.get("human_response", "")):
+        return None
+
+    question = state.get("question", "")
+    original_request = state.get("original_request", "")
+    combined = f"{question}\n{original_request}"
+    if "delete" not in combined.lower():
+        return None
+
+    branch = _extract_branch_name(question) or _extract_branch_name(original_request)
+    if not branch:
+        return None
+
+    return f"Delete branch {branch} (explicitly approved by user)"
+
+
 def planner_node(state: GitState):
     user_request = (
         state["original_request"]
@@ -107,6 +172,27 @@ def planner_node(state: GitState):
     )
     context = gather_repo_context(user_query=user_request)
     repo_rules = context["repo_rules"]
+
+    approved_delete_todo = _approved_delete_todo(state)
+    if approved_delete_todo:
+        response = HumanMessage(content=f"TODOS:\n1. {approved_delete_todo}")
+        print("\n===== PLANNER =====")
+        print(response.content)
+        print("\n===== TODOS =====")
+        print([approved_delete_todo])
+
+        return {
+            "messages": [response],
+            "todos": [approved_delete_todo],
+            "current_todo": 0,
+            "done": False,
+            "final_answer": "",
+            "repo_context": context["summary"],
+            "default_branch": context["default_branch"],
+            "replan": False,
+            "human_response": "",
+            "execution_history": state.get("execution_history", []),
+        }
 
     if state.get("replan"):
         user_content = f"""
@@ -164,6 +250,18 @@ USER REQUEST:
     print(todos)
 
     if not todos:
+        if looks_like_direct_answer(content):
+            return {
+                "messages": [response],
+                "todos": [],
+                "current_todo": 0,
+                "done": True,
+                "final_answer": content,
+                "repo_context": context["summary"],
+                "default_branch": context["default_branch"],
+                "replan": False,
+                "human_response": "",
+            }
         raise ValueError(f"Planner produced invalid output:\n{content}")
 
     return {
