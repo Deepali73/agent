@@ -62,7 +62,7 @@ while True:
                 "messages": result["messages"] + [HumanMessage(content=answer)],
                 "human_response": answer,
                 "waiting_for_user": False,
-                "replan": False,
+                "replan": True,
                 "done": False,
             }
             continue

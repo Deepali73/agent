@@ -49,14 +49,17 @@ COMMAND RULES:
 - One command per response.
 
 PROHIBITED (require HUMAN_INPUT_REQUIRED):
-- Delete branches
 - Force push
 - History rewrite (rebase -i, reset --hard, etc.)
 - Modifying an existing branch without explicit user approval
 
+- Do not delete branches unless the user explicitly approves deletion after a prompt.
+
 If a requested branch already exists and the TODO is to create it:
 HUMAN_INPUT_REQUIRED:
 Branch '<name>' already exists. Use a different name, switch to it, or delete it?
+
+If the user responds with explicit approval to delete the existing branch, output the required delete command using `git branch -D <name>`.
 
 OUTPUT FORMAT (exactly one):
 
@@ -76,6 +79,18 @@ def extract_next_command(text: str) -> str | None:
     if not match:
         return None
     return match.group(1).strip().splitlines()[0].strip()
+
+
+def _approved_delete_command(todo: str) -> str | None:
+    if "explicitly approved by user" not in todo.lower():
+        return None
+
+    match = re.search(r"\bdelete\s+branch\s+([^\s.,;:!?()]+)", todo, re.IGNORECASE)
+    if not match:
+        return None
+
+    branch = match.group(1).strip()
+    return f"git branch -D {branch}"
 
 
 def coordinator_node(state: GitState):
@@ -112,6 +127,21 @@ def coordinator_node(state: GitState):
         if history
         else "(no commands executed yet)"
     )
+
+    approved_delete_command = _approved_delete_command(current_todo)
+    if approved_delete_command:
+        content = f"NEXT_COMMAND:\n{approved_delete_command}"
+
+        print("\n===== COORDINATOR =====")
+        print(f"TODO: {current_todo}")
+        print(content)
+
+        return {
+            "messages": [HumanMessage(content=content)],
+            "current_todo": current_idx,
+            "todo_complete": False,
+            "next_command": approved_delete_command,
+        }
 
     todo_context = SystemMessage(
         content=f"""
