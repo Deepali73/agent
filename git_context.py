@@ -21,7 +21,21 @@ def _run_git(args: list[str], repo_path: str) -> tuple[str, int]:
     return output, result.returncode
 
 
+from config import (
+    CONTEXT_MAX_BRANCHES,
+    CONTEXT_MAX_COMMITS_PER_BRANCH,
+    CONTEXT_MAX_FILES_PER_BRANCH,
+    REPO_PATH,
+    DEFAULT_BRANCH,
+)
+
+
 def _detect_default_branch(repo_path: str) -> str:
+    if DEFAULT_BRANCH:
+        _, code = _run_git(["rev-parse", "--verify", DEFAULT_BRANCH], repo_path)
+        if code == 0:
+            return DEFAULT_BRANCH
+
     output, code = _run_git(
         ["symbolic-ref", "refs/remotes/origin/HEAD"],
         repo_path,

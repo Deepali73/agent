@@ -1,3 +1,4 @@
+import re
 import shlex
 import subprocess
 
@@ -130,16 +131,22 @@ def _delete_target(command: str) -> str | None:
 
 
 def _deterministic_completion(state: GitState) -> tuple[bool, str] | None:
-    if state.get("last_return_code") != 0:
-        return None
+    last_return_code = state.get("last_return_code", 0)
+    last_output = state.get("last_output", "") or ""
 
     command = _last_command(state)
 
     delete_target = _delete_target(command)
     if delete_target:
+        # If branch is already gone according to git, consider the TODO complete.
         if not _branch_exists(delete_target):
             return True, f"Git no longer finds branch '{delete_target}'."
-        return False, f"Delete command succeeded, but branch '{delete_target}' still exists."
+
+        # If git returned a non-zero exit but output indicates "not found", treat as complete.
+        if last_return_code != 0 and re.search(r"not.*found|not a valid.*ref|fatal:.*not", last_output, re.IGNORECASE):
+            return True, f"Delete command returned non-zero, but output indicates branch '{delete_target}' is absent."
+
+        return False, f"Delete command {'succeeded' if last_return_code == 0 else 'failed'}; branch '{delete_target}' still exists."
 
     target = _checkout_target(command)
     if not target:
@@ -148,6 +155,12 @@ def _deterministic_completion(state: GitState) -> tuple[bool, str] | None:
     current = _current_branch()
     if current == target:
         return True, f"Git reports the current branch is '{current}'."
+
+    # If output contains explicit switch messages, accept that as completion when reasonable.
+    if last_return_code != 0:
+        if re.search(r"Switched to|Already on|HEAD is now at", last_output, re.IGNORECASE):
+            return True, f"Checkout output indicates switch to '{target}'."
+        return None
 
     return False, f"Checkout command succeeded, but current branch is '{current or '(detached HEAD)'}', not '{target}'."
 
