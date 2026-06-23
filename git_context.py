@@ -251,7 +251,12 @@ def gather_repo_context(
 
     top_level, _ = _run_git(["rev-parse", "--show-toplevel"], repo_path)
     current_branch, _ = _run_git(["branch", "--show-current"], repo_path)
-    all_branches_raw, _ = _run_git(["branch", "-a", "--no-color"], repo_path)
+    all_branches_raw_full, _ = _run_git(["branch", "-a", "--no-color"], repo_path)
+    all_branches_lines = all_branches_raw_full.splitlines() if all_branches_raw_full else []
+    all_branches_limited = all_branches_lines[:CONTEXT_MAX_BRANCHES * 2]
+    all_branches_raw = "\n".join(all_branches_limited)
+    if len(all_branches_lines) > len(all_branches_limited):
+        all_branches_raw += f"\n... and {len(all_branches_lines) - len(all_branches_limited)} more branches"
     remotes, _ = _run_git(["remote", "-v"], repo_path)
     status, _ = _run_git(["status", "-sb"], repo_path)
     graph, _ = _run_git(

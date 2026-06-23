@@ -13,6 +13,23 @@ load_dotenv()
 llm = ChatGroq(model=GROQ_MODEL)
 
 
+def _enhance_todos_with_auto_merge(todos: list[str], default_branch: str) -> list[str]:
+    """Auto-append merge todos after branch creation."""
+    enhanced = []
+    
+    for todo in todos:
+        enhanced.append(todo)
+        # Detect "Create branch X" patterns
+        match = re.search(r"Create\s+branch\s+([^\s.,;:!?()]+)", todo, re.IGNORECASE)
+        if match:
+            branch_name = match.group(1).strip()
+            if branch_name != default_branch:
+                merge_todo = f"Merge {branch_name} into {default_branch}"
+                enhanced.append(merge_todo)
+    
+    return enhanced
+
+
 def _build_planner_prompt(repo_rules: str) -> SystemMessage:
     return SystemMessage(
         content=f"""
@@ -264,9 +281,16 @@ USER REQUEST:
             }
         raise ValueError(f"Planner produced invalid output:\n{content}")
 
+    # Auto-enhance todos with merge-after-create
+    enhanced_todos = _enhance_todos_with_auto_merge(todos, context["default_branch"])
+    
+    if enhanced_todos != todos:
+        print("\n===== AUTO-MERGED TODOS (auto-merge enabled) =====")
+        print(enhanced_todos)
+
     return {
         "messages": [response],
-        "todos": todos,
+        "todos": enhanced_todos,
         "current_todo": 0,
         "done": False,
         "final_answer": "",

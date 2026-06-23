@@ -26,7 +26,7 @@ def _int_env(name: str, default: int) -> int:
 
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 REPO_PATH = get_repo_path()
-DEFAULT_BRANCH = os.getenv("DEFAULT_BRANCH", "").strip()
+DEFAULT_BRANCH = "dev-1"
 
 # How much repository intelligence to load before each request
 CONTEXT_MAX_BRANCHES = _int_env("CONTEXT_MAX_BRANCHES", 20)
